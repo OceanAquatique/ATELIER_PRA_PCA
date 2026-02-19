@@ -230,13 +230,18 @@ Faites preuve de pédagogie et soyez clair dans vos explications et procedures d
 
 **Exercice 1 :**  
 Quels sont les composants dont la perte entraîne une perte de données ?  
-  
-*..Répondez à cet exercice ici..*
+
+Le PVC pra-data (et son PV derrière) : c'est le stockahge persistant qui contient la BDD SQLite active. Si on la perd, on perd la BDD en cours.
+Il en va de même pour le PVC pra-backup et son PV derrière. Il contient des copies de cette base en tant que sauvegardes, et le perdre revient à perdre notre capacité de restauration PRA.
+Le mécanisme CronJob est aussi très important. En effet, c'est lui qui permet de réaliser des sauvegardes, et impossible de restaurer pra-data à un état antérieur sans lui.
 
 **Exercice 2 :**  
 Expliquez nous pourquoi nous n'avons pas perdu les données lors de la supression du PVC pra-data  
-  
-*..Répondez à cet exercice ici..*
+Le PVC = une demande de stockage (un claim).
+Le PV = le vrai volume (la ressource de stockage).
+
+Supprimer le claim n’efface pas automatiquement le volume réel.
+Supprimer un PVC n'induit pas forcément la suppression des données physiques
 
 **Exercice 3 :**  
 Quels sont les RTO et RPO de cette solution ?  
