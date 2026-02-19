@@ -234,29 +234,45 @@ Quels sont les composants dont la perte entraîne une perte de données ?
 Le PVC pra-data (et son PV derrière) : c'est le stockahge persistant qui contient la BDD SQLite active. Si on la perd, on perd la BDD en cours.
 Il en va de même pour le PVC pra-backup et son PV derrière. Il contient des copies de cette base en tant que sauvegardes, et le perdre revient à perdre notre capacité de restauration PRA.
 Le mécanisme CronJob est aussi très important. En effet, c'est lui qui permet de réaliser des sauvegardes, et impossible de restaurer pra-data à un état antérieur sans lui.
+Enfin, notre noeud actuel est central. En effet, tout est centralisé dessus (contrairement à une infra de production réelle où le stockage est externalisé (SAN, cloud volume, etc...). Depuis notre propre cluster, on peur perdre les PV.
 
 **Exercice 2 :**  
 Expliquez nous pourquoi nous n'avons pas perdu les données lors de la supression du PVC pra-data  
 Le PVC = une demande de stockage (un claim).
 Le PV = le vrai volume (la ressource de stockage).
-
-Supprimer le claim n’efface pas automatiquement le volume réel.
-Supprimer un PVC n'induit pas forcément la suppression des données physiques
+Ainsi, supprimer le claim n’efface pas automatiquement le volume réel, et supprimer un PVC n'induit pas forcément la suppression des données physiques.
+On n’a pas perdu les données car la suppression du PVC n’a pas supprimé le PV / la data : le volume était conservé (reclaim policy de type Retain ou stockage conservé), donc la base SQLite était toujours présente. A l’inverse, avec une policy Delete, ou si on supprime le PV / le backend storage, là oui on perdrait toute la data.
 
 **Exercice 3 :**  
 Quels sont les RTO et RPO de cette solution ?  
   
-*..Répondez à cet exercice ici..*
+Le RPO (Recovery Point Objective) est d'1 minute (CronJob). En cas de crash et restauration depuis le backup, on peut perdre jusqu'à 1 minute de données.
+Le RTO (Recovery Time Objective) dépend du temps nécessaire et cumulé pour détecter l'incident, redéployer et restaurer la base (copies du backup vers le volume principal), relancer l'application et vérifier que tout fonctionne correctement.
+Si les commandes sont déjà prêtes, cela prend quelques minutes à peine : de 5 à 15 minutes.
 
-**Exercice 4 :**  
+Le RPO est imposé par la fréquence des backups (1 min).
+Le RTO dépend surtout des procédures manuelles et du temps de restoration/redéploiement (donc variable, même si en minutes dan notre cas).
+
+**Exercice 4 :**
 Pourquoi cette solution (cet atelier) ne peux pas être utilisé dans un vrai environnement de production ? Que manque-t-il ?   
   
-*..Répondez à cet exercice ici..*
+Il s'agit d'une maquette pédagodique dédiée à la démonstration d'un principe, mais pas assez robuste pour un environnement d eproduciton réel.
+Pour basculer en prod, il faudrait :
+- Un mode HA multi-noeuds avec tolérance de panne. Ici, il manque une infrastructure Kubernetes réelle.
+- Un stockage persistant de production fiable : Ceph, NFS cluster, SAN ou des volumes cloud. Ici, SQLite est positionné sur le PV local, ce qui est un gros risque si le storage ou le node venaient à tomber (renvoie à la fin de la question 1).
+- Notre BDD SQLite est un fichier et donc limité, notamment avec risque de backup incohérent si copie pendant écriture, selon la méthode utilisée. En prod, l'utilisation de PostgreSQL/MySQL permettrait plus d'option et de granularité (transactions, concurrence, réplications, sauvegardes cohérentes).
+- En prod, les backup sont versionnés, chiffrés, testés avec rétention sur plusieurs jours, avec des exports hors cluster. Ici, il s'agit d'un backup local simple, sans rotation ni chiffrement, ni contrôle d'intégrité ou de test de restauration automatique.
+- L'aspect sécurité est faible, sans hardening réel. Il n'existe pas de NetworkPolicies, de secrets correctement gérés, de scanning d'images...
+- Il n'y a aucune notion de traçabilité, d'alerting ou de relevé des metrics. De slogs centralisés sont indispensables pour corréler les informations sur un dashboard par exemple.
   
 **Exercice 5 :**  
 Proposez une archtecture plus robuste.   
   
-*..Répondez à cet exercice ici..*
+Kebernetes serait directement en cluster HA avec une Base PostgreSQL (pas seulement SQLite).
+Mise en place d'une stockage persistant distribué (Ceph/Longhorn) pour les volumes applicatifs.
+Les cackups PostgreSQL seraient chiffrés, avec rétention et des tests de restauration, des snaposhots + WAL archiving. Le tout serait envoyé vers Object Storage. J'ajouterais une gestion solide des secrets et le TLS.
+Enfin, l emonitoring se ferait sur Prmetheus/Grafana, avec logs centralisés sur Loki.
+La pipeline CI/CD se ferait via GitHbug > Déploiement (ArgoCD/Flux)
 
 ---------------------------------------------------
 Séquence 6 : Ateliers  
